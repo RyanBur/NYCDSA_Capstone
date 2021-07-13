@@ -1,0 +1,153 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(MASS)
+library(car)
+library(dplyr)
+library(ggplot2)
+library(ggvenn)
+```
+```{r}
+datatrain=read.csv("prelim_data_acsTRAIN.csv")
+datatest=read.csv("prelim_data_acsTEST.csv")
+datatest = subset(datatest, select = -c(RegionName,City,State,median_rent) )
+datatrain = subset(datatrain, select = -c(RegionName,City,State) )
+```
+
+
+using AIC as its better for selecting simpler model due to higher penalty 
+```{r}
+
+n=nrow(datatrain)
+
+model_empty = lm(X2020.01 ~ 1, data = datatrain) #Null model.
+model_full = lm(X2020.01 ~ ., data = datatrain) #full model.
+scope = list(lower = formula(model_empty), upper = formula(model_full))
+
+
+
+forwardAIC = step(model_empty, scope, direction = "forward",  k = 2,trace=0)
+backwardAIC = step(model_full, scope, direction = "backward",  k = 2,trace=0)
+bothAIC = step(model_empty, scope, direction = "both",  k = 2,trace=0)
+
+```
+
+
+forwardAIC feature selection:
+```{r}
+sig_attributesforwardAIC=sort(summary(forwardAIC)$coefficients[-1,4],decreasing = TRUE)
+PvalsforwardAIC=as.numeric((sig_attributesforwardAIC))
+CoeffsforwardAIC=names(sig_attributesforwardAIC)
+sig_attributesforwardAIC=as.data.frame(do.call(cbind,list(Co = CoeffsforwardAIC, P = PvalsforwardAIC)))
+sig_attributesforwardAIC$P=1-as.numeric(sig_attributesforwardAIC$P)
+
+sig_attributesforwardAIC$Co <- factor(sig_attributesforwardAIC$Co,levels = CoeffsforwardAIC)
+ggplot(sig_attributesforwardAIC,aes(x = Co, y = P)) +
+         geom_bar(stat = "identity") +coord_flip(ylim=c(.99,1))+ylab('1-Pval (Closer to 1= more sig)')+xlab('Attribute')+ggtitle('ForwardAIC Selected Attributes')
+cat("Deems ",length(CoeffsforwardAIC)," attributes to be important" )
+```
+```{r}
+CoeffsforwardAIC
+
+```
+backwardAIC
+```{r}
+sig_attributesbackwardAIC=sort(summary(backwardAIC)$coefficients[-1,4],decreasing = TRUE)
+PvalsbackwardAIC=as.numeric((sig_attributesbackwardAIC))
+CoeffsbackwardAIC=names(sig_attributesbackwardAIC)
+sig_attributesbackwardAIC=as.data.frame(do.call(cbind,list(Co = CoeffsbackwardAIC, P = PvalsbackwardAIC)))
+sig_attributesbackwardAIC$P=1-as.numeric(sig_attributesbackwardAIC$P)
+
+sig_attributesbackwardAIC$Co <- factor(sig_attributesbackwardAIC$Co,levels = CoeffsbackwardAIC)
+ggplot(sig_attributesbackwardAIC,aes(x = Co, y = P)) +
+         geom_bar(stat = "identity") +coord_flip(ylim=c(.99,1))+ylab('1-Pval (Closer to 1= more sig)')+xlab('Attribute')+ggtitle('BackwardAIC Selected Attributes')
+
+cat("Deems ",length(CoeffsbackwardAIC)," attributes to be important" )
+```
+bothAIC feature selection:
+```{r}
+sig_attributesbothAIC=sort(summary(bothAIC)$coefficients[-1,4],decreasing = TRUE)
+PvalsbothAIC=as.numeric((sig_attributesbothAIC))
+CoeffsbothAIC=names(sig_attributesbothAIC)
+sig_attributesbothAIC=as.data.frame(do.call(cbind,list(Co = CoeffsbothAIC, P = PvalsbothAIC)))
+sig_attributesbothAIC$P=1-as.numeric(sig_attributesbothAIC$P)
+
+sig_attributesbothAIC$Co <- factor(sig_attributesbothAIC$Co,levels = CoeffsbothAIC)
+ggplot(sig_attributesbothAIC,aes(x = Co, y = P)) +
+         geom_bar(stat = "identity") +coord_flip(ylim=c(.99,1))+ylab('1-Pval (Closer to 1= more sig)')+xlab('Attribute')+ggtitle('bothAIC Selected Attributes')
+cat("Deems ",length(CoeffsbothAIC)," attributes to be important" )
+```
+
+What features are in  all models?
+
+```{r}
+x= list(both=CoeffsbothAIC,forward= CoeffsforwardAIC,backward=CoeffsbackwardAIC )
+
+ggvenn(
+  x,
+  fill_color = c("#0073C2FF", "#EFC000FF", "#868686FF", "#CD534CFF"),
+  stroke_size = 0.5, set_name_size = 4,text_size = 4,show_percentage = FALSE
+  )+ggtitle('Attributes in each model')
+
+```
+```{r}
+
+cat('The 24 in all \n')
+intersect(intersect(CoeffsbothAIC,CoeffsforwardAIC),CoeffsbackwardAIC)
+cat('\n\nThe 11 in backward alone \n')
+setdiff(CoeffsbackwardAIC, union(CoeffsbothAIC,CoeffsforwardAIC))
+cat('\n\nThe 1 in forward alone \n')
+setdiff(CoeffsforwardAIC, union(CoeffsbothAIC,CoeffsbackwardAIC))
+
+cat('\n\nThe both model \n')
+CoeffsbothAIC
+
+```
+
+
+```{r}
+#union(union(CoeffsbothAIC,CoeffsforwardAIC),CoeffsbackwardAIC)
+#append(append(CoeffsbothAIC,CoeffsforwardAIC),CoeffsbackwardAIC)
+coefcounts=table(append(append(CoeffsbothAIC,CoeffsforwardAIC),CoeffsbackwardAIC))
+coefcountsdf=as.data.frame(do.call(cbind,list(Names = names(coefcounts), Count = as.numeric(coefcounts))))
+coefcountsdf=coefcountsdf[order(coefcountsdf$Count),c(1,2)]
+
+coefcountsdf$Names <- factor(coefcountsdf$Names,levels = coefcountsdf$Names)
+
+ggplot(coefcountsdf,aes(x = Names, y = Count)) +
+         geom_bar(stat = "identity") +coord_flip()+ylab('# models it appears in')+xlab('Attribute')+ggtitle('Attributes in Fwd, Bkwd and Both Models')+ theme(axis.text.y= element_text(size=8))
+```
+
+pro of both model-no troubling vifs
+```{r}
+sort(vif(forwardAIC),decreasing = TRUE)[sort(vif(forwardAIC),decreasing = TRUE)>5]
+sort(vif(backwardAIC),decreasing = TRUE)[sort(vif(backwardAIC),decreasing = TRUE)>5]
+sort(vif(bothAIC),decreasing = TRUE)[sort(vif(bothAIC),decreasing = TRUE)>5]
+
+```
+
+
+Examing the BothAIC model test and train r2s 
+```{r}
+model_both = lm(SalePrice ~ MasVnrType_BrkFace+Foundation_Stone+Exterior1st_AsbShng+LotArea+Fireplaces+HeatingQC_TA+Exterior1st_BrkFace+Foundation_Wood+Condition1_Artery+BsmtFinGdLvng+Functional_Min+Neighborhood_NoRidge+ExterQual_Gd+BsmtExposure+KitchenQual_Ex+BsmtQual_Ex+Functional_Maj+OverallCondBinary+OverallQual+ExterQual_Ex+TotalBsmtSF+BsmtUnfSF+GrLivArea+LndAc_S, data = housingdata)
+
+(summary(model_both))
+
+predictedsaleprices=predict(model_both, housingdatatest)
+ypredictyactual=data.frame( housingdatatest$SalePrice,predictedsaleprices)
+ggplot(ypredictyactual, aes(x=housingdatatest$SalePrice, y=predictedsaleprices)) +
+  geom_point(size=2, shape=23)+ylab('Predicted SalePrice')+xlab('Actual Sale Price')+ggtitle('Predicted vs Actual Sale Price BothAIC Model')
+
+
+
+#get test r2 val 
+RSQUARE = function(y_actual,y_predict){
+  cor(y_actual,y_predict)^2
+}
+#RSQUARE(housingdatatest$SalePrice, predictedsaleprices)
+
+cat('Test R2 is ',RSQUARE(housingdatatest$SalePrice, predictedsaleprices))
+```
