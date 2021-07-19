@@ -1,0 +1,153 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(MASS)
+library(car)
+
+library(ggplot2)
+library(ggvenn)
+```
+```{r}
+
+substrRight <- function(x, n){
+  substr(x, nchar(x)-n+1, nchar(x))
+}
+
+
+stepwisefunct<- function(trainpath,testpath,directions='both',Log_y=FALSE,currentrent=TRUE,pca=FALSE){
+  
+  #load data
+  datatrain=read.csv(trainpath)
+  datatest=read.csv(testpath)
+  if (pca==FALSE){
+    datatest = subset(datatest, select = -c(RegionName,City,State) )
+    datatrain = subset(datatrain, select = -c(RegionName,City,State) )
+     #remove current rent if called for
+  
+    if (currentrent==FALSE){
+      datatest = subset(datatest, select = -c(Current.Rent) )
+      datatrain = subset(datatrain, select = -c(Current.Rent) )
+  
+  }
+  
+  
+  }
+  
+ 
+  
+  #logarize if called for
+  if (Log_y){
+    datatest$Rent=log(datatest$Rent)
+    datatrain$Rent=log(datatrain$Rent)
+  }
+  
+  #initialize models
+  n=nrow(datatrain)
+  model_empty = lm(Rent ~ 1, data = datatrain) #Null model.
+  model_full = lm(Rent ~ ., data = datatrain) #full model.
+  scope = list(lower = formula(model_empty), upper = formula(model_full))
+  bothAIC = step(model_empty, scope, direction = directions,  k = 2,trace=0)
+  
+  #
+  sig_attributesbothAIC=sort(summary(bothAIC)$coefficients[-1,4],decreasing = TRUE)
+  PvalsbothAIC=as.numeric((sig_attributesbothAIC))
+  CoeffsbothAIC=names(sig_attributesbothAIC)
+  sig_attributesbothAIC=as.data.frame(do.call(cbind,list(Co = CoeffsbothAIC, P = PvalsbothAIC)))
+  cat("Starts with ",ncol(datatrain)," cols\n\n")
+  cat("Deems ",length(CoeffsbothAIC)," attributes to be important\n\n" )
+  
+  print(sig_attributesbothAIC)
+  print(sort(vif(bothAIC),decreasing = TRUE)[sort(vif(bothAIC),decreasing = TRUE)>5])
+  
+  
+  #explore its performance 
+  #get test r2 val 
+  RSQUARE = function(y_actual,y_predict){
+    cor(y_actual,y_predict)^2}
+  
+  predictedRents=predict(bothAIC, datatest)
+  cat('\n\nTrain R2 is ',RSQUARE(datatrain$Rent, predict(bothAIC, datatrain)))
+  cat('\n\nTest R2 is ',RSQUARE(datatest$Rent, predictedRents),'\n\n')
+  
+  cat('\n\nCols not in model:\n')
+  setdiff(colnames(datatest), CoeffsbothAIC)
+  return(bothAIC)
+}
+
+
+```
+
+```{r}
+
+##JULY 16
+#bothAIC=stepwisefunct("acs_data/Data_acsTRAIN.csv","acs_data/Data_acsTEST.csv",directions='forward')
+
+bothAIC=stepwisefunct("TRAINDATAnewcols7.16_1year.csv","TESTDATAnewcols7.16_1year.csv",directions='forward')
+```
+```{r}
+##JULY 16
+RSQUARE = function(y_actual,y_predict){
+    cor(y_actual,y_predict)^2}
+  
+
+datapredict=read.csv("PREDICTDATAnewcols7.16_1year.csv")
+cat('\n\nPredict R2  is ',RSQUARE(datapredict$Rent, predict(bothAIC, datapredict)))
+```
+```{r}
+##JULY 17
+bothAIC=stepwisefunct("TRAINDATAnewcols7.17_3year.csv","TESTDATAnewcols7.17_3year.csv",directions='forward')
+RSQUARE = function(y_actual,y_predict){
+    cor(y_actual,y_predict)^2}
+  
+datapredict=read.csv("PREDICTDATAnewcols7.17_3year.csv")
+cat('\n\nPredict R2  is ',RSQUARE(datapredict$Rent, predict(bothAIC, datapredict)))
+```
+
+```{r}
+##JULY 19
+log_y=FALSE
+bothAIC=stepwisefunct("TRAINDATAnewcols7.18_3year.csv","TESTDATAnewcols7.18_3year.csv",directions='forward',log_y,currentrent=FALSE)
+RSQUARE = function(y_actual,y_predict){
+    cor(y_actual,y_predict)^2}
+  
+datapredict=read.csv("PREDICTDATAnewcols7.18_3year.csv")
+datapredict=datapredict[substr(substrRight(datapredict$RegionName,7),1,4)=='2019',]
+if (log_y){
+  datapredict$Rent=log(datapredict$Rent)
+}
+cat('\n\nPredict R2  is ',RSQUARE(datapredict$Rent, predict(bothAIC, datapredict)))
+```
+
+```{r}
+##JULY 19 pt 2
+log_y=FALSE
+bothAIC=stepwisefunct("TRAINDATAnewcols7.19_3year.csv","TESTDATAnewcols7.19_3year.csv",directions='forward',log_y,currentrent=FALSE)
+RSQUARE = function(y_actual,y_predict){
+    cor(y_actual,y_predict)^2}
+  
+datapredict=read.csv("PREDICTDATAnewcols7.19_3year.csv")
+datapredict=datapredict[substr(substrRight(datapredict$RegionName,7),1,4)=='2019',]
+if (log_y){
+  datapredict$Rent=log(datapredict$Rent)
+}
+cat('\n\nPredict R2  is ',RSQUARE(datapredict$Rent, predict(bothAIC, datapredict)))
+
+```
+
+```{r}
+
+##JULY 19 pca
+log_y=TRUE
+bothAIC=stepwisefunct("TRAINDATAnewcols7.19_3yearPCApartial.csv","TESTDATAnewcols7.19_3yearPCApartial.csv",directions='forward',log_y,currentrent=FALSE,pca=TRUE)
+RSQUARE = function(y_actual,y_predict){
+    cor(y_actual,y_predict)^2}
+  
+datapredict=read.csv("PREDICTDATAnewcols7.19_3yearPCApartial.csv")
+
+if (log_y){
+  datapredict$Rent=log(datapredict$Rent)
+}
+cat('\n\nPredict R2  is ',RSQUARE(datapredict$Rent, predict(bothAIC, datapredict)))
+```
