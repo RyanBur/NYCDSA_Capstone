@@ -1,0 +1,71 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+stepwisefunct<- function(trainpath,testpath,directions='both'){
+  
+  #load data
+  datatrain=read.csv(trainpath)
+  datatest=read.csv(testpath)
+  datatest = subset(datatest, select = -c(RegionName,City,State) )
+  datatrain = subset(datatrain, select = -c(RegionName,City,State) )
+  
+  #initialize models
+  n=nrow(datatrain)
+  model_empty = lm(Rent ~ 1, data = datatrain) #Null model.
+  model_full = lm(Rent ~ ., data = datatrain) #full model.
+  scope = list(lower = formula(model_empty), upper = formula(model_full))
+  bothAIC = step(model_empty, scope, direction = directions,  k = 2,trace=0)
+  
+  #
+  sig_attributesbothAIC=sort(summary(bothAIC)$coefficients[-1,4],decreasing = TRUE)
+  PvalsbothAIC=as.numeric((sig_attributesbothAIC))
+  CoeffsbothAIC=names(sig_attributesbothAIC)
+  sig_attributesbothAIC=as.data.frame(do.call(cbind,list(Co = CoeffsbothAIC, P = PvalsbothAIC)))
+  cat("Starts with ",ncol(datatrain)," cols\n\n")
+  cat("Deems ",length(CoeffsbothAIC)," attributes to be important\n\n" )
+  
+  print(sig_attributesbothAIC)
+  print(sort(vif(bothAIC),decreasing = TRUE)[sort(vif(bothAIC),decreasing = TRUE)>5])
+  
+  
+  #explore its performance 
+  #get test r2 val 
+  RSQUARE = function(y_actual,y_predict){
+    cor(y_actual,y_predict)^2}
+  
+  predictedRents=predict(bothAIC, datatest)
+  cat('\n\nTrain R2 is ',RSQUARE(datatrain$Rent, predict(bothAIC, datatrain)))
+  cat('\n\nTest R2 is ',RSQUARE(datatest$Rent, predictedRents),'\n\n')
+  
+  cat('\n\nCols not in model:\n')
+  setdiff(colnames(datatest), CoeffsbothAIC)
+  return(bothAIC)
+}
+
+
+```
+
+```{r}
+#bothAIC=stepwisefunct("acs_data/Data_acsTRAIN.csv","acs_data/Data_acsTEST.csv",directions='forward')
+
+bothAIC=stepwisefunct("col_droptrain7.14.csv","col_droptest7.14.csv",directions='forward')
+```
+```{r}
+RSQUARE = function(y_actual,y_predict){
+    cor(y_actual,y_predict)^2}
+  
+
+datapredict2018=read.csv("acs_data/Data_acsPREDICT2018.csv")
+cat('\n\nPredict R2 2018 is ',RSQUARE(datapredict2018$Rent, predict(bothAIC, datapredict2018)))
+
+datapredict2019=read.csv("acs_data/Data_acsPREDICT2019.csv")
+cat('\n\nPredict R2 2019 is ',RSQUARE(datapredict2019$Rent, predict(bothAIC, datapredict2019)))
+
+
+datapredict2020=read.csv("acs_data/Data_acsPREDICT2020.csv")
+cat('\n\nPredict R2 2020 is ',RSQUARE(datapredict2020$Rent, predict(bothAIC, datapredict2020)))
+
+```
